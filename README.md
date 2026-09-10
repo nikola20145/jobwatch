@@ -43,6 +43,7 @@ jobwatch add-keyword --field location amsterdam
 jobwatch seed        # ingest the current backlog silently (no alert flood)
 jobwatch run         # one pass; --loop to poll every POLL_INTERVAL_SECONDS
 jobwatch status      # row counts + pending alerts
+jobwatch serve       # web dashboard + JSON API at http://127.0.0.1:8000
 ```
 
 Any Greenhouse- or Lever-hosted company works with the same two scrapers — the board token is the slug in `boards.greenhouse.io/<token>` or `jobs.lever.co/<token>`. Verified boards with an Amsterdam/NL presence:
@@ -64,6 +65,15 @@ Any Greenhouse- or Lever-hosted company works with the same two scrapers — the
 2. Send your bot any message, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `chat.id` into `TELEGRAM_CHAT_ID`.
 
 Without credentials the pipeline still ingests; it just skips the alert phase.
+
+## Dashboard & API
+
+`jobwatch serve` runs a FastAPI app over the same database:
+
+- `/` — HTML dashboard: stats, latest postings, matches highlighted (`/?matched_only=true` to filter)
+- `/api/postings` — JSON, with `?limit=`, `?q=<title search>`, `?matched_only=true`
+- `/api/stats` — row counts and pending-alert count
+- `/api/health` — liveness probe
 
 ## Tests
 
@@ -87,4 +97,5 @@ The container migrates and then polls: `alembic upgrade head && jobwatch run --l
 - [ ] Recruitee (`<company>.recruitee.com/api/offers`) — the ATS many Dutch scale-ups use
 - [ ] Queue-backed workers (Redis + RQ/Celery) so each source is an independent job
 - [ ] Email as a second alert channel
-- [ ] Small web dashboard over the postings table
+- [x] Small web dashboard + JSON API over the postings table (FastAPI, `jobwatch serve`)
+- [ ] Whole-word keyword matching option ("intern" currently also hits "Internal")

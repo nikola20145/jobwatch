@@ -49,6 +49,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="show row counts and pending alerts")
 
+    p = sub.add_parser("serve", help="run the web dashboard and JSON API")
+    p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--port", type=int, default=8000)
+
     return parser
 
 
@@ -148,6 +152,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "run":
         return cmd_run(session_factory, settings, loop=args.loop)
+
+    if args.command == "serve":
+        import uvicorn
+
+        from jobwatch.web import create_app
+
+        uvicorn.run(create_app(session_factory), host=args.host, port=args.port)
+        return 0
 
     with session_factory() as session:
         if args.command == "add-source":
