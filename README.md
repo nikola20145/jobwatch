@@ -45,7 +45,18 @@ jobwatch run         # one pass; --loop to poll every POLL_INTERVAL_SECONDS
 jobwatch status      # row counts + pending alerts
 ```
 
-Any Greenhouse-hosted company works with the same scraper — `--token mollie`, `--token gitlab`, ... The board token is the slug in `boards.greenhouse.io/<token>`.
+Any Greenhouse- or Lever-hosted company works with the same two scrapers — the board token is the slug in `boards.greenhouse.io/<token>` or `jobs.lever.co/<token>`. Verified boards with an Amsterdam/NL presence:
+
+| Company | Command |
+|---|---|
+| Adyen | `jobwatch add-source --ats greenhouse --token adyen --name Adyen` |
+| IMC Trading | `jobwatch add-source --ats greenhouse --token imc --name "IMC Trading"` |
+| Databricks | `jobwatch add-source --ats greenhouse --token databricks --name Databricks` |
+| Elastic | `jobwatch add-source --ats greenhouse --token elastic --name Elastic` |
+| Flexport | `jobwatch add-source --ats greenhouse --token flexport --name Flexport` |
+| Catawiki | `jobwatch add-source --ats greenhouse --token catawiki --name Catawiki` |
+| Bird | `jobwatch add-source --ats greenhouse --token bird --name Bird` |
+| Mendix | `jobwatch add-source --ats lever --token mendix --name Mendix` |
 
 ## Telegram setup
 
@@ -72,7 +83,8 @@ The container migrates and then polls: `alembic upgrade head && jobwatch run --l
 
 ## Roadmap
 
-- [ ] Second ATS type (Lever's `api.lever.co/v0/postings/<company>` — same pattern, different shape)
+- [x] Second ATS type — Lever (`api.lever.co/v0/postings/<company>`: bare array, epoch-ms timestamps)
+- [ ] Recruitee (`<company>.recruitee.com/api/offers`) — the ATS many Dutch scale-ups use
 - [ ] Queue-backed workers (Redis + RQ/Celery) so each source is an independent job
 - [ ] Email as a second alert channel
 - [ ] Small web dashboard over the postings table

@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("add-source", help="register a career board to poll")
     p.add_argument("--name", required=True, help="display name, e.g. Adyen")
-    p.add_argument("--ats", required=True, choices=["greenhouse"], help="ATS type")
+    p.add_argument("--ats", required=True, choices=["greenhouse", "lever"], help="ATS type")
     p.add_argument("--token", required=True, help="board token, e.g. adyen")
 
     p = sub.add_parser("add-keyword", help="save match terms")
