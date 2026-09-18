@@ -20,6 +20,8 @@ flowchart LR
 
 **Schema** (Alembic-managed): `sources` (which boards to poll), `postings` (deduped jobs, raw JSON kept), `keywords` (match terms per field), `alerts_sent` (delivery ledger — the unique `(posting_id, channel)` constraint is what makes alerting exactly-once).
 
+**Posting lifecycle**: every run touches `last_seen_at` for postings still on their board; a posting that disappears gets `closed_at` set (and cleared again if it returns). Closed postings never alert, and an entirely empty batch never mass-closes — that's more likely an ATS glitch than a company deleting every job at once.
+
 **Idempotency, in three layers**
 1. *Ingestion*: a posting's identity is `(source_id, external_id)`; re-fetching the same board is a no-op, edits are detected via a SHA-256 `content_hash` and updated in place.
 2. *Alerting*: a posting is alerted at most once per channel, enforced by the DB, not by application memory.
@@ -46,7 +48,7 @@ jobwatch status      # row counts + pending alerts
 jobwatch serve       # web dashboard + JSON API at http://127.0.0.1:8000
 ```
 
-Any Greenhouse- or Lever-hosted company works with the same two scrapers — the board token is the slug in `boards.greenhouse.io/<token>` or `jobs.lever.co/<token>`. Verified boards with an Amsterdam/NL presence:
+Any company on Greenhouse, Lever, or Recruitee works with the same three scrapers — the board token is the slug in `boards.greenhouse.io/<token>`, `jobs.lever.co/<token>`, or `<token>.recruitee.com`. Verified boards with an Amsterdam/NL presence:
 
 | Company | Command |
 |---|---|
@@ -58,6 +60,7 @@ Any Greenhouse- or Lever-hosted company works with the same two scrapers — the
 | Catawiki | `jobwatch add-source --ats greenhouse --token catawiki --name Catawiki` |
 | Bird | `jobwatch add-source --ats greenhouse --token bird --name Bird` |
 | Mendix | `jobwatch add-source --ats lever --token mendix --name Mendix` |
+| Channable | `jobwatch add-source --ats recruitee --token channable --name Channable` |
 
 ## Telegram setup
 
@@ -65,6 +68,10 @@ Any Greenhouse- or Lever-hosted company works with the same two scrapers — the
 2. Send your bot any message, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `chat.id` into `TELEGRAM_CHAT_ID`.
 
 Without credentials the pipeline still ingests; it just skips the alert phase.
+
+**Alert modes.** Default is instant: one message per new match, per run. Set `ALERT_MODE=digest` to make runs ingest-only and instead send one combined daily summary via `jobwatch digest` (run it from a cron). A digest covers at most 25 postings — Telegram's message-size limit — and the overflow rolls into the next one.
+
+**Keyword precision.** Matching is case-insensitive substring by default (recall over precision: `intern` should also hit "Internship"). For terms where that's too loose, `add-keyword --whole-word` matches at word boundaries only — `intern` stops hitting "Internal", but also "Internship", so save both variants if you want both.
 
 ## Dashboard & API
 
@@ -94,8 +101,11 @@ The container migrates and then polls: `alembic upgrade head && jobwatch run --l
 ## Roadmap
 
 - [x] Second ATS type — Lever (`api.lever.co/v0/postings/<company>`: bare array, epoch-ms timestamps)
-- [ ] Recruitee (`<company>.recruitee.com/api/offers`) — the ATS many Dutch scale-ups use
+- [x] Recruitee (`<company>.recruitee.com/api/offers`) — the ATS many Dutch scale-ups use
+- [x] Posting lifecycle: close/reopen detection via `last_seen_at`
+- [x] Daily digest mode (`ALERT_MODE=digest` + `jobwatch digest` on a cron)
+- [x] Whole-word keyword matching option (`add-keyword --whole-word`)
+- [x] Lint + type-checking in CI (ruff, mypy)
 - [ ] Queue-backed workers (Redis + RQ/Celery) so each source is an independent job
 - [ ] Email as a second alert channel
 - [x] Small web dashboard + JSON API over the postings table (FastAPI, `jobwatch serve`)
-- [ ] Whole-word keyword matching option ("intern" currently also hits "Internal")
