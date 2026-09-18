@@ -75,10 +75,19 @@ Without credentials the pipeline still ingests; it just skips the alert phase.
 
 ## Dashboard & API
 
-`jobwatch serve` runs a FastAPI app over the same database:
+`jobwatch serve` runs a FastAPI app over the same database. The UI is a React + TypeScript SPA (Vite) with live search, source/status filters, a matches-only toggle, dark mode, and auto-refresh — served by FastAPI itself, so one process (and one container) carries both API and UI. When `web/dist` hasn't been built, it falls back to a dependency-free server-rendered page, so the command works without Node.
 
-- `/` — HTML dashboard: stats, latest postings, matches highlighted (`/?matched_only=true` to filter)
-- `/api/postings` — JSON, with `?limit=`, `?q=<title search>`, `?matched_only=true`
+```bash
+cd web && npm install && npm run build   # build the SPA once (needs Node 20+)
+```
+
+For frontend development, `npm run dev` starts Vite with hot reload, proxying `/api` to the running `jobwatch serve`.
+
+Endpoints:
+
+- `/` — the dashboard
+- `/api/postings` — JSON, with `?limit=`, `?q=<title search>`, `?source=<name>`, `?status=open|closed`, `?matched_only=true`
+- `/api/sources` — registered boards
 - `/api/stats` — row counts and pending-alert count
 - `/api/health` — liveness probe
 
@@ -109,3 +118,4 @@ The container migrates and then polls: `alembic upgrade head && jobwatch run --l
 - [ ] Queue-backed workers (Redis + RQ/Celery) so each source is an independent job
 - [ ] Email as a second alert channel
 - [x] Small web dashboard + JSON API over the postings table (FastAPI, `jobwatch serve`)
+- [x] React + TypeScript frontend (Vite), served by FastAPI with a no-Node fallback page

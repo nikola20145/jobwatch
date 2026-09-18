@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from jobwatch.db.models import AlertSent, Base, Keyword, Posting, Source
+from jobwatch.db.models import AlertSent, Base, Keyword, Posting, Source, utcnow
 from jobwatch.web import create_app
 
 from .conftest import make_scraped
@@ -21,8 +21,9 @@ def client():
     factory = sessionmaker(bind=engine, expire_on_commit=False)
 
     with factory() as session:
-        source = Source(name="Adyen", ats_type="greenhouse", board_token="adyen")
-        session.add(source)
+        adyen = Source(name="Adyen", ats_type="greenhouse", board_token="adyen")
+        mendix = Source(name="Mendix", ats_type="lever", board_token="mendix")
+        session.add_all([adyen, mendix])
         session.add_all(
             [
                 Keyword(field="title", term="intern"),
@@ -31,28 +32,32 @@ def client():
         )
         session.flush()
         scraped = [
-            make_scraped("1", title="Software Engineering Intern", location="Amsterdam"),
-            make_scraped("2", title="Sales Manager <script>", location="Amsterdam"),
+            ("1", adyen, make_scraped("1", title="Software Engineering Intern", location="Amsterdam"), None),
+            ("2", adyen, make_scraped("2", title="Sales Manager <script>", location="Amsterdam"), None),
+            ("3", mendix, make_scraped("3", title="Platform Intern", location="Amsterdam"), utcnow()),
         ]
         postings = [
             Posting(
-                source_id=source.id,
+                source_id=src.id,
                 external_id=s.external_id,
                 title=s.title,
                 url=s.url,
                 location=s.location,
                 posted_at=s.posted_at,
                 content_hash=s.content_hash,
+                closed_at=closed_at,
                 raw=s.raw,
             )
-            for s in scraped
+            for _, src, s, closed_at in scraped
         ]
         session.add_all(postings)
         session.flush()
         session.add(AlertSent(posting_id=postings[0].id, channel="telegram"))
         session.commit()
 
-    with TestClient(create_app(factory)) as c:
+    # Pin a nonexistent dist so these tests exercise the server-rendered
+    # fallback even on machines where web/dist has been built.
+    with TestClient(create_app(factory, web_dist="does-not-exist")) as c:
         yield c
     engine.dispose()
 
@@ -64,27 +69,49 @@ def test_health(client):
 
 def test_stats(client):
     body = client.get("/api/stats").json()
-    assert body["sources"] == 1
-    assert body["postings"] == 2
+    assert body["sources"] == 2
+    assert body["postings"] == 3
+    assert body["open_postings"] == 2
     assert body["keywords"] == 2
     assert body["alerts_sent"] == 1
-    assert body["pending_alerts"] == 0  # the only match is already alerted
+    # The open match is alerted; the other match is closed, so nothing pends.
+    assert body["pending_alerts"] == 0
 
 
 def test_postings_carry_match_and_alert_flags(client):
     body = client.get("/api/postings").json()
-    assert len(body) == 2
+    assert len(body) == 3
     by_id = {p["external_id"]: p for p in body}
     assert by_id["1"]["matched"] is True
     assert by_id["1"]["alerted"] is True
     assert by_id["1"]["source"] == "Adyen"
+    assert by_id["1"]["closed_at"] is None
     assert by_id["2"]["matched"] is False
     assert by_id["2"]["alerted"] is False
+    assert by_id["3"]["closed_at"] is not None
 
 
 def test_postings_matched_only_filter(client):
     body = client.get("/api/postings", params={"matched_only": "true"}).json()
-    assert [p["external_id"] for p in body] == ["1"]
+    assert {p["external_id"] for p in body} == {"1", "3"}
+
+
+def test_postings_source_filter(client):
+    body = client.get("/api/postings", params={"source": "Adyen"}).json()
+    assert {p["external_id"] for p in body} == {"1", "2"}
+
+
+def test_postings_status_filter(client):
+    closed = client.get("/api/postings", params={"status": "closed"}).json()
+    assert [p["external_id"] for p in closed] == ["3"]
+    opened = client.get("/api/postings", params={"status": "open"}).json()
+    assert {p["external_id"] for p in opened} == {"1", "2"}
+
+
+def test_sources_endpoint(client):
+    body = client.get("/api/sources").json()
+    assert [s["name"] for s in body] == ["Adyen", "Mendix"]
+    assert body[0]["ats_type"] == "greenhouse"
 
 
 def test_postings_title_search(client):
@@ -93,8 +120,26 @@ def test_postings_title_search(client):
 
 
 def test_dashboard_html_renders_and_escapes(client):
+    # No web/dist in the test environment -> server-rendered fallback page.
     response = client.get("/")
     assert response.status_code == 200
     assert "Software Engineering Intern" in response.text
     assert "<script>" not in response.text  # posting titles are escaped
     assert "&lt;script&gt;" in response.text
+
+
+def test_spa_served_when_build_exists(tmp_path):
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    (tmp_path / "index.html").write_text("<html><body>SPA BUILD</body></html>")
+
+    with TestClient(create_app(factory, web_dist=tmp_path)) as c:
+        response = c.get("/")
+        assert response.status_code == 200
+        assert "SPA BUILD" in response.text
+        # The API keeps working alongside the static frontend.
+        assert c.get("/api/health").json()["status"] == "ok"
+    engine.dispose()

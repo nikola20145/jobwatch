@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # "instant": every run alerts per posting. "digest": runs only ingest;
     # `jobwatch digest` (run from a daily cron) sends one summary message.
     alert_mode: Literal["instant", "digest"] = "instant"
+    # Built frontend (web/dist). When present, `jobwatch serve` serves the
+    # React app; otherwise it falls back to the built-in server-rendered page.
+    web_dist: str = "web/dist"
 
     @field_validator("database_url")
     @classmethod

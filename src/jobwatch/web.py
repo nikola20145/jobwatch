@@ -4,10 +4,12 @@ Run locally with `jobwatch serve`, then open http://127.0.0.1:8000.
 """
 
 import html as html_mod
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload, selectinload, sessionmaker
 
@@ -18,10 +20,15 @@ from jobwatch.db.session import make_engine, make_session_factory
 from jobwatch.matching import posting_matches
 
 
-def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
+def create_app(
+    session_factory: sessionmaker[Session] | None = None,
+    web_dist: str | Path | None = None,
+) -> FastAPI:
     """Build the FastAPI app. Tests inject their own session_factory."""
+    settings = Settings()
     if session_factory is None:
-        session_factory = make_session_factory(make_engine(Settings()))
+        session_factory = make_session_factory(make_engine(settings))
+    dist = Path(web_dist) if web_dist is not None else Path(settings.web_dist)
 
     app = FastAPI(title="jobwatch", version=__version__)
 
@@ -42,25 +49,57 @@ def create_app(session_factory: sessionmaker[Session] | None = None) -> FastAPI:
         session: Session = Depends(get_session),
         limit: int = Query(default=50, ge=1, le=500),
         q: str | None = Query(default=None, description="substring filter on title"),
+        source: str | None = Query(default=None, description="filter by source name"),
+        status: Literal["all", "open", "closed"] = Query(default="all"),
         matched_only: bool = Query(default=False),
     ) -> list[dict[str, Any]]:
-        rows = _recent_postings(session, limit=limit, q=q, matched_only=matched_only)
+        rows = _recent_postings(
+            session, limit=limit, q=q, matched_only=matched_only, source=source, status=status
+        )
         return [_serialize(posting, matched) for posting, matched in rows]
 
-    @app.get("/", response_class=HTMLResponse)
-    def dashboard(
-        session: Session = Depends(get_session),
-        matched_only: bool = Query(default=False),
-    ) -> str:
-        counts = _stats(session)
-        rows = _recent_postings(session, limit=100, q=None, matched_only=matched_only)
-        return _render_dashboard(counts, rows, matched_only)
+    @app.get("/api/sources")
+    def sources(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
+        rows = session.scalars(select(Source).order_by(Source.name)).all()
+        return [
+            {"id": s.id, "name": s.name, "ats_type": s.ats_type, "enabled": s.enabled}
+            for s in rows
+        ]
+
+    spa_index = dist / "index.html"
+    if spa_index.is_file():
+        # Built React frontend (web/dist): FastAPI serves it directly, so one
+        # process — and one container — carries both the API and the UI.
+        if (dist / "assets").is_dir():
+            app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
+
+        @app.get("/", include_in_schema=False)
+        def spa_root() -> FileResponse:
+            return FileResponse(spa_index)
+
+    else:
+        # No frontend build: fall back to the dependency-free server-rendered
+        # page so `jobwatch serve` works without Node.
+        @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+        def dashboard(
+            session: Session = Depends(get_session),
+            matched_only: bool = Query(default=False),
+        ) -> str:
+            counts = _stats(session)
+            rows = _recent_postings(session, limit=100, q=None, matched_only=matched_only)
+            return _render_dashboard(counts, rows, matched_only)
 
     return app
 
 
 def _recent_postings(
-    session: Session, *, limit: int, q: str | None, matched_only: bool
+    session: Session,
+    *,
+    limit: int,
+    q: str | None,
+    matched_only: bool,
+    source: str | None = None,
+    status: str = "all",
 ) -> list[tuple[Posting, bool]]:
     keywords = session.scalars(select(Keyword)).all()
     stmt = (
@@ -68,6 +107,12 @@ def _recent_postings(
         .options(joinedload(Posting.source), selectinload(Posting.alerts))
         .order_by(Posting.scraped_at.desc(), Posting.id.desc())
     )
+    if source:
+        stmt = stmt.where(Posting.source_id.in_(select(Source.id).where(Source.name == source)))
+    if status == "open":
+        stmt = stmt.where(Posting.closed_at.is_(None))
+    elif status == "closed":
+        stmt = stmt.where(Posting.closed_at.is_not(None))
     if q:
         stmt = stmt.where(Posting.title.ilike(f"%{q}%"))
     # Matching is Python-side (case-insensitive substring over keyword terms),
@@ -111,7 +156,10 @@ def _stats(session: Session) -> dict[str, int]:
             .where(AlertSent.posting_id == Posting.id)
             .exists()
         )
-        unalerted = session.scalars(select(Posting).where(~already)).all()
+        # Mirror pipeline.pending_alerts: closed postings never alert.
+        unalerted = session.scalars(
+            select(Posting).where(~already, Posting.closed_at.is_(None))
+        ).all()
         pending = sum(1 for p in unalerted if posting_matches(p, keywords))
     return {
         "sources": count(select(func.count()).select_from(Source)),

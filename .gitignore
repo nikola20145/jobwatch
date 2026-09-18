@@ -17,6 +17,10 @@ htmlcov/
 *.db
 *.sqlite3
 
+# Frontend
+node_modules/
+web/dist/
+
 # Editors / OS
 .idea/
 .vscode/
