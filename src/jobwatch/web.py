@@ -4,6 +4,7 @@ Run locally with `jobwatch serve`, then open http://127.0.0.1:8000.
 """
 
 import html as html_mod
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
@@ -48,13 +49,20 @@ def create_app(
     def postings(
         session: Session = Depends(get_session),
         limit: int = Query(default=50, ge=1, le=500),
+        offset: int = Query(default=0, ge=0),
         q: str | None = Query(default=None, description="substring filter on title"),
         source: str | None = Query(default=None, description="filter by source name"),
         status: Literal["all", "open", "closed"] = Query(default="all"),
         matched_only: bool = Query(default=False),
     ) -> list[dict[str, Any]]:
         rows = _recent_postings(
-            session, limit=limit, q=q, matched_only=matched_only, source=source, status=status
+            session,
+            limit=limit,
+            offset=offset,
+            q=q,
+            matched_only=matched_only,
+            source=source,
+            status=status,
         )
         return [_serialize(posting, matched) for posting, matched in rows]
 
@@ -65,6 +73,17 @@ def create_app(
             {"id": s.id, "name": s.name, "ats_type": s.ats_type, "enabled": s.enabled}
             for s in rows
         ]
+
+    @app.get("/api/stats/timeline")
+    def stats_timeline(
+        session: Session = Depends(get_session),
+        weeks: int = Query(default=12, ge=4, le=52),
+    ) -> list[dict[str, Any]]:
+        return _timeline(session, weeks)
+
+    @app.get("/api/stats/sources")
+    def stats_sources(session: Session = Depends(get_session)) -> list[dict[str, Any]]:
+        return _source_stats(session)
 
     spa_index = dist / "index.html"
     if spa_index.is_file():
@@ -96,6 +115,7 @@ def _recent_postings(
     session: Session,
     *,
     limit: int,
+    offset: int = 0,
     q: str | None,
     matched_only: bool,
     source: str | None = None,
@@ -116,11 +136,16 @@ def _recent_postings(
     if q:
         stmt = stmt.where(Posting.title.ilike(f"%{q}%"))
     # Matching is Python-side (case-insensitive substring over keyword terms),
-    # so filter while streaming instead of in SQL. Fine at this table's scale.
+    # so filter — and paginate — while streaming instead of in SQL. Fine at
+    # this table's scale.
     results: list[tuple[Posting, bool]] = []
+    skipped = 0
     for posting in session.scalars(stmt):
         matched = posting_matches(posting, keywords)
         if matched_only and not matched:
+            continue
+        if skipped < offset:
+            skipped += 1
             continue
         results.append((posting, matched))
         if len(results) >= limit:
@@ -139,9 +164,66 @@ def _serialize(posting: Posting, matched: bool) -> dict[str, Any]:
         "posted_at": posting.posted_at.isoformat() if posting.posted_at else None,
         "scraped_at": posting.scraped_at.isoformat() if posting.scraped_at else None,
         "closed_at": posting.closed_at.isoformat() if posting.closed_at else None,
+        "last_seen_at": posting.last_seen_at.isoformat() if posting.last_seen_at else None,
         "matched": matched,
         "alerted": any(not a.suppressed for a in posting.alerts),
     }
+
+
+def _week_start(value: datetime) -> date:
+    # SQLite hands back naive datetimes even for timezone-aware columns;
+    # everything jobwatch stores is UTC, so assume UTC when the tz is missing.
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    day = value.astimezone(UTC).date()
+    return day - timedelta(days=day.weekday())
+
+
+def _timeline(session: Session, weeks: int) -> list[dict[str, Any]]:
+    """Postings per ISO week (by posted_at, falling back to scraped_at),
+    with the matched share, for the last `weeks` weeks.
+
+    Aggregated in Python: matching lives in Python, and grouping in SQL would
+    be dialect-specific. Fine at this table's scale (thousands of rows).
+    """
+    keywords = session.scalars(select(Keyword)).all()
+    current = _week_start(datetime.now(UTC))
+    buckets = [current - timedelta(weeks=i) for i in reversed(range(weeks))]
+    counts: dict[date, dict[str, int]] = {b: {"count": 0, "matched": 0} for b in buckets}
+
+    for posting in session.scalars(select(Posting)):
+        reference = posting.posted_at or posting.scraped_at
+        bucket = counts.get(_week_start(reference))
+        if bucket is None:
+            continue  # older than the window
+        bucket["count"] += 1
+        if posting_matches(posting, keywords):
+            bucket["matched"] += 1
+
+    return [
+        {"week": b.isoformat(), "count": counts[b]["count"], "matched": counts[b]["matched"]}
+        for b in buckets
+    ]
+
+
+def _source_stats(session: Session) -> list[dict[str, Any]]:
+    keywords = session.scalars(select(Keyword)).all()
+    out: list[dict[str, Any]] = []
+    for source in session.scalars(select(Source).order_by(Source.name)):
+        postings = session.scalars(
+            select(Posting).where(Posting.source_id == source.id)
+        ).all()
+        out.append(
+            {
+                "name": source.name,
+                "ats_type": source.ats_type,
+                "enabled": source.enabled,
+                "total": len(postings),
+                "open": sum(1 for p in postings if p.closed_at is None),
+                "matched": sum(1 for p in postings if posting_matches(p, keywords)),
+            }
+        )
+    return out
 
 
 def _stats(session: Session) -> dict[str, int]:

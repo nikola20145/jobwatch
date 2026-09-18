@@ -9,9 +9,11 @@ function formatDate(value: string | null): string {
 export function PostingsTable({
   postings,
   loading,
+  onSelect,
 }: {
   postings: Posting[];
   loading: boolean;
+  onSelect: (posting: Posting) => void;
 }) {
   if (loading && postings.length === 0) {
     return <div className="empty">Loading postings…</div>;
@@ -36,9 +38,18 @@ export function PostingsTable({
         </thead>
         <tbody>
           {postings.map((p) => (
-            <tr key={p.id} className={p.matched ? "hit" : p.closed_at ? "muted" : ""}>
+            <tr
+              key={p.id}
+              className={`row ${p.matched ? "hit" : p.closed_at ? "muted" : ""}`}
+              onClick={() => onSelect(p)}
+            >
               <td>
-                <a href={p.url} target="_blank" rel="noopener">
+                <a
+                  href={p.url}
+                  target="_blank"
+                  rel="noopener"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   {p.title}
                 </a>
                 {p.matched && <span className="badge match">match</span>}

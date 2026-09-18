@@ -114,6 +114,36 @@ def test_sources_endpoint(client):
     assert body[0]["ats_type"] == "greenhouse"
 
 
+def test_postings_offset_paginates(client):
+    first = client.get("/api/postings", params={"limit": 2}).json()
+    rest = client.get("/api/postings", params={"limit": 2, "offset": 2}).json()
+    assert len(first) == 2
+    assert len(rest) == 1
+    ids = {p["external_id"] for p in first} | {p["external_id"] for p in rest}
+    assert ids == {"1", "2", "3"}
+
+
+def test_timeline_buckets_by_week(client):
+    body = client.get("/api/stats/timeline").json()
+    assert len(body) == 12
+    # All three fixture postings are posted a week ago, inside the window.
+    assert sum(p["count"] for p in body) == 3
+    assert sum(p["matched"] for p in body) == 2
+    week_with_data = next(p for p in body if p["count"])
+    assert week_with_data["count"] == 3 and week_with_data["matched"] == 2
+
+
+def test_source_stats_aggregates(client):
+    body = client.get("/api/stats/sources").json()
+    by_name = {s["name"]: s for s in body}
+    assert by_name["Adyen"]["total"] == 2
+    assert by_name["Adyen"]["open"] == 2
+    assert by_name["Adyen"]["matched"] == 1
+    assert by_name["Mendix"]["total"] == 1
+    assert by_name["Mendix"]["open"] == 0  # its posting is closed
+    assert by_name["Mendix"]["matched"] == 1
+
+
 def test_postings_title_search(client):
     body = client.get("/api/postings", params={"q": "sales"}).json()
     assert [p["external_id"] for p in body] == ["2"]

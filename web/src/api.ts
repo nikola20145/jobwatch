@@ -8,8 +8,24 @@ export interface Posting {
   posted_at: string | null;
   scraped_at: string | null;
   closed_at: string | null;
+  last_seen_at: string | null;
   matched: boolean;
   alerted: boolean;
+}
+
+export interface TimelinePoint {
+  week: string;
+  count: number;
+  matched: number;
+}
+
+export interface SourceStat {
+  name: string;
+  ats_type: string;
+  enabled: boolean;
+  total: number;
+  open: number;
+  matched: number;
 }
 
 export interface Stats {
@@ -51,11 +67,23 @@ export function fetchSources(): Promise<SourceInfo[]> {
   return get<SourceInfo[]>("/api/sources");
 }
 
-export function fetchPostings(filters: PostingFilters, limit = 100): Promise<Posting[]> {
-  const params = new URLSearchParams({ limit: String(limit) });
+export function fetchPostings(
+  filters: PostingFilters,
+  limit = 50,
+  offset = 0,
+): Promise<Posting[]> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
   if (filters.q) params.set("q", filters.q);
   if (filters.source) params.set("source", filters.source);
   if (filters.status !== "all") params.set("status", filters.status);
   if (filters.matchedOnly) params.set("matched_only", "true");
   return get<Posting[]>(`/api/postings?${params}`);
+}
+
+export function fetchTimeline(): Promise<TimelinePoint[]> {
+  return get<TimelinePoint[]>("/api/stats/timeline");
+}
+
+export function fetchSourceStats(): Promise<SourceStat[]> {
+  return get<SourceStat[]>("/api/stats/sources");
 }

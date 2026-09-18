@@ -1,17 +1,21 @@
+import { RefObject } from "react";
+
 import { PostingFilters, SourceInfo } from "../api";
 
 interface Props {
   filters: PostingFilters;
   sources: SourceInfo[];
   onChange: (next: PostingFilters) => void;
+  searchRef: RefObject<HTMLInputElement>;
 }
 
-export function FiltersBar({ filters, sources, onChange }: Props) {
+export function FiltersBar({ filters, sources, onChange, searchRef }: Props) {
   return (
     <div className="filters">
       <input
+        ref={searchRef}
         type="search"
-        placeholder="Search titles…"
+        placeholder="Search titles…  ( / )"
         value={filters.q}
         onChange={(e) => onChange({ ...filters, q: e.target.value })}
         aria-label="Search titles"

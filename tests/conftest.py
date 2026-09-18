@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine
@@ -38,12 +38,17 @@ def amsterdam_keywords(session: Session) -> list[Keyword]:
     return keywords
 
 
+# Relative, not fixed: the timeline endpoint buckets recent weeks, and a
+# hard-coded date would age out of its window and rot the tests.
+DEFAULT_POSTED_AT = datetime.now(UTC) - timedelta(days=7)
+
+
 def make_scraped(
     external_id: str = "100",
     title: str = "Software Engineer Intern",
     url: str = "https://example.com/jobs/100",
     location: str | None = "Amsterdam",
-    posted_at: datetime | None = datetime(2026, 9, 1, tzinfo=UTC),
+    posted_at: datetime | None = DEFAULT_POSTED_AT,
 ) -> ScrapedPosting:
     return ScrapedPosting(
         external_id=external_id,
