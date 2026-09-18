@@ -95,6 +95,7 @@ def _serialize(posting: Posting, matched: bool) -> dict[str, Any]:
         "location": posting.location,
         "posted_at": posting.posted_at.isoformat() if posting.posted_at else None,
         "scraped_at": posting.scraped_at.isoformat() if posting.scraped_at else None,
+        "closed_at": posting.closed_at.isoformat() if posting.closed_at else None,
         "matched": matched,
         "alerted": any(not a.suppressed for a in posting.alerts),
     }
@@ -117,6 +118,9 @@ def _stats(session: Session) -> dict[str, int]:
     return {
         "sources": count(select(func.count()).select_from(Source)),
         "postings": count(select(func.count()).select_from(Posting)),
+        "open_postings": count(
+            select(func.count()).select_from(Posting).where(Posting.closed_at.is_(None))
+        ),
         "keywords": count(select(func.count()).select_from(Keyword)),
         "alerts_sent": count(
             select(func.count()).select_from(AlertSent).where(~AlertSent.suppressed)
@@ -140,6 +144,8 @@ def _render_dashboard(
             badges += '<span class="badge match">match</span>'
         if any(not a.suppressed for a in posting.alerts):
             badges += '<span class="badge sent">alerted</span>'
+        if posting.closed_at is not None:
+            badges += '<span class="badge closed">closed</span>'
         posted = f"{posting.posted_at:%Y-%m-%d}" if posting.posted_at else "—"
         body_rows.append(
             f'<tr class="{"hit" if matched else ""}">'
@@ -168,6 +174,7 @@ def _render_dashboard(
   .badge {{ font-size: .65rem; border-radius: .4rem; padding: .1rem .35rem; margin-left: .4rem; vertical-align: middle; }}
   .badge.match {{ background: #dcfce7; color: #166534; }}
   .badge.sent {{ background: #dbeafe; color: #1e40af; }}
+  .badge.closed {{ background: #f3f4f6; color: #6b7280; }}
   .toolbar {{ margin: .5rem 0 1rem; font-size: .85rem; }}
 </style></head><body>
 <h1>jobwatch <small>v{esc(__version__)}</small></h1>

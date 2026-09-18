@@ -35,9 +35,12 @@ class RunReport:
         inserted = sum(s.inserted for s in self.ingest.values())
         updated = sum(s.updated for s in self.ingest.values())
         unchanged = sum(s.unchanged for s in self.ingest.values())
+        closed = sum(s.closed for s in self.ingest.values())
+        reopened = sum(s.reopened for s in self.ingest.values())
         return (
             f"sources={len(self.ingest)} inserted={inserted} updated={updated} "
-            f"unchanged={unchanged} alerts_sent={self.alerts_sent} "
+            f"unchanged={unchanged} closed={closed} reopened={reopened} "
+            f"alerts_sent={self.alerts_sent} "
             f"alerts_suppressed={self.alerts_suppressed} errors={len(self.errors)}"
         )
 
@@ -126,13 +129,17 @@ def _alert_phase(
 def pending_alerts(
     session: Session, keywords: Sequence[Keyword], channel: str
 ) -> list[Posting]:
-    """Matching postings that have not been alerted (or suppressed) on this channel."""
+    """Open, matching postings not yet alerted (or suppressed) on this channel.
+
+    Closed postings are excluded: a job that was taken down before we ever
+    alerted on it is no longer worth a notification.
+    """
     already = (
         select(AlertSent.id)
         .where(AlertSent.posting_id == Posting.id, AlertSent.channel == channel)
         .exists()
     )
     candidates = session.scalars(
-        select(Posting).where(~already).order_by(Posting.id)
+        select(Posting).where(~already, Posting.closed_at.is_(None)).order_by(Posting.id)
     ).all()
     return [p for p in candidates if posting_matches(p, keywords)]

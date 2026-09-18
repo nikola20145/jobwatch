@@ -71,6 +71,10 @@ class Posting(Base):
     location: Mapped[str | None] = mapped_column(Text())
     posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     scraped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Lifecycle: last_seen_at is touched on every run the posting is still on
+    # its board; closed_at is set when it disappears (and cleared if it returns).
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
     raw: Mapped[dict] = mapped_column(JsonType)
 
