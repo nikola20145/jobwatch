@@ -21,7 +21,7 @@ from jobwatch.alerts.telegram import TelegramAlerter
 from jobwatch.config import Settings
 from jobwatch.db.models import KEYWORD_FIELDS, AlertSent, Keyword, Posting, Source
 from jobwatch.db.session import make_engine, make_session_factory
-from jobwatch.pipeline import pending_alerts, run_once
+from jobwatch.pipeline import pending_alerts, run_once, send_digest
 
 log = logging.getLogger("jobwatch")
 
@@ -54,6 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("run", help="run the fetch -> ingest -> match -> alert pipeline")
     p.add_argument("--loop", action="store_true", help="keep polling at POLL_INTERVAL_SECONDS")
+
+    sub.add_parser(
+        "digest",
+        help="send one combined message for all pending matches "
+        "(pair with ALERT_MODE=digest and a daily cron)",
+    )
 
     sub.add_parser("status", help="show row counts and pending alerts")
 
@@ -120,8 +126,23 @@ def cmd_seed(session: Session, settings: Settings) -> int:
     return 1 if report.errors else 0
 
 
-def cmd_run(session_factory, settings: Settings, loop: bool) -> int:
+def cmd_digest(session: Session, settings: Settings) -> int:
     alerter = make_alerter(settings)
+    if alerter is None:
+        print("digest needs Telegram credentials configured", file=sys.stderr)
+        return 1
+    covered = send_digest(session, alerter)
+    print(f"digest covered {covered} posting(s)" if covered else "nothing pending; no digest sent")
+    return 0
+
+
+def cmd_run(session_factory, settings: Settings, loop: bool) -> int:
+    if settings.alert_mode == "digest":
+        # Ingest-only runs; `jobwatch digest` (daily cron) does the sending.
+        log.info("ALERT_MODE=digest: runs ingest only, use `jobwatch digest` to send")
+        alerter = None
+    else:
+        alerter = make_alerter(settings)
     while True:
         with session_factory() as session:
             report = run_once(session, alerter=alerter)
@@ -181,6 +202,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_add_keyword(session, args)
         if args.command == "seed":
             return cmd_seed(session, settings)
+        if args.command == "digest":
+            return cmd_digest(session, settings)
         if args.command == "status":
             return cmd_status(session)
     raise AssertionError(f"unhandled command {args.command!r}")

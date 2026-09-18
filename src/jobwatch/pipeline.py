@@ -127,6 +127,41 @@ def _alert_phase(
     session.commit()
 
 
+# Telegram caps messages at 4096 chars; ~25 entries stays comfortably under.
+# Anything beyond the cap stays pending and rolls into the next digest.
+DIGEST_LIMIT = 25
+
+
+def send_digest(session: Session, alerter: Alerter) -> int:
+    """Send one combined message for all pending matches; returns how many
+    postings it covered (0 = nothing pending, nothing sent).
+
+    All covered postings are recorded in one commit after a successful send.
+    A crash between send and commit re-sends the whole digest next time —
+    for a daily summary that is the right side of the at-least-once trade.
+    """
+    keywords = session.scalars(select(Keyword)).all()
+    if not keywords:
+        log.warning("no keywords saved; nothing can match — add some with `jobwatch add-keyword`")
+        return 0
+
+    pending = pending_alerts(session, keywords, alerter.channel)
+    if not pending:
+        return 0
+    batch = pending[:DIGEST_LIMIT]
+    if len(pending) > DIGEST_LIMIT:
+        log.info(
+            "digest capped at %d of %d pending postings; the rest roll over",
+            DIGEST_LIMIT,
+            len(pending),
+        )
+    alerter.send_digest(batch)
+    for posting in batch:
+        session.add(AlertSent(posting_id=posting.id, channel=alerter.channel))
+    session.commit()
+    return len(batch)
+
+
 def pending_alerts(
     session: Session, keywords: Sequence[Keyword], channel: str
 ) -> list[Posting]:

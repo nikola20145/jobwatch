@@ -1,5 +1,7 @@
 """Application settings, loaded from environment variables and an optional .env file."""
 
+from typing import Literal
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,6 +14,9 @@ class Settings(BaseSettings):
     telegram_chat_id: str = ""
     poll_interval_seconds: int = 3600
     request_timeout_seconds: float = 30.0
+    # "instant": every run alerts per posting. "digest": runs only ingest;
+    # `jobwatch digest` (run from a daily cron) sends one summary message.
+    alert_mode: Literal["instant", "digest"] = "instant"
 
     @field_validator("database_url")
     @classmethod

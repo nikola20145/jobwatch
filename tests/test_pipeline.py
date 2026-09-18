@@ -9,14 +9,21 @@ from .conftest import make_scraped
 class FakeAlerter:
     channel = "telegram"
 
-    def __init__(self, fail_for: set[str] | None = None):
+    def __init__(self, fail_for: set[str] | None = None, fail_digest: bool = False):
         self.sent: list[Posting] = []
+        self.digests: list[list[Posting]] = []
         self.fail_for = fail_for or set()
+        self.fail_digest = fail_digest
 
     def send(self, posting: Posting) -> None:
         if posting.external_id in self.fail_for:
             raise RuntimeError("simulated delivery failure")
         self.sent.append(posting)
+
+    def send_digest(self, postings) -> None:
+        if self.fail_digest:
+            raise RuntimeError("simulated digest failure")
+        self.digests.append(list(postings))
 
 
 def fetchers_returning(batch):
