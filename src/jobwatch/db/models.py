@@ -97,6 +97,11 @@ class Keyword(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     field: Mapped[str] = mapped_column(String(20))
     term: Mapped[str] = mapped_column(String(200))
+    # Substring matching by default (recall over precision: "intern" should
+    # hit "Internship"). whole_word opts a term out of false positives like
+    # "intern" hitting "Internal" — at the cost of no longer hitting
+    # "Internship", so save both variants if both are wanted.
+    whole_word: Mapped[bool] = mapped_column(Boolean(), default=False, server_default="0")
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<Keyword {self.field}:{self.term!r}>"

@@ -39,6 +39,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("add-keyword", help="save match terms")
     p.add_argument("--field", required=True, choices=list(KEYWORD_FIELDS))
+    p.add_argument(
+        "--whole-word",
+        action="store_true",
+        help="match at word boundaries only ('intern' stops hitting 'Internal' — "
+        "but also 'Internship'; save both variants if both are wanted)",
+    )
     p.add_argument("terms", nargs="+", help="one or more terms (case-insensitive substring match)")
 
     sub.add_parser(
@@ -93,10 +99,15 @@ def cmd_add_keyword(session: Session, args: argparse.Namespace) -> int:
             select(Keyword).where(Keyword.field == args.field, Keyword.term == term)
         )
         if exists:
-            print(f"already saved: {args.field}:{term}")
+            if exists.whole_word != args.whole_word:
+                exists.whole_word = args.whole_word
+                print(f"updated {args.field}:{term} (whole_word={args.whole_word})")
+            else:
+                print(f"already saved: {args.field}:{term}")
             continue
-        session.add(Keyword(field=args.field, term=term))
-        print(f"added keyword {args.field}:{term}")
+        session.add(Keyword(field=args.field, term=term, whole_word=args.whole_word))
+        suffix = " (whole-word)" if args.whole_word else ""
+        print(f"added keyword {args.field}:{term}{suffix}")
     session.commit()
     return 0
 
