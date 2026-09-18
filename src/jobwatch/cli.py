@@ -49,7 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser(
         "seed",
-        help="ingest current postings and mark matches as already-seen, so only future postings alert",
+        help="ingest current postings and mark matches as already-seen, "
+        "so only future postings alert",
     )
 
     p = sub.add_parser("run", help="run the fetch -> ingest -> match -> alert pipeline")

@@ -1,8 +1,8 @@
 """Idempotent ingestion: fetched postings -> database rows, without duplicates."""
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session

@@ -7,7 +7,7 @@ company's subdomain on recruitee.com — common among Dutch scale-ups.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -79,6 +79,6 @@ def _parse_recruitee_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str):
         return None
     try:
-        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S UTC").replace(tzinfo=timezone.utc)
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S UTC").replace(tzinfo=UTC)
     except ValueError:
         return None

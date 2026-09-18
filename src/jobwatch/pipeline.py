@@ -1,8 +1,8 @@
 """One full run: fetch every enabled source, ingest, match, alert."""
 
 import logging
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Callable, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -67,7 +67,9 @@ def run_once(
         fetcher = fetchers.get(source.ats_type)
         if fetcher is None:
             report.errors.append(f"{source.name}: no fetcher for ats_type {source.ats_type!r}")
-            log.error("no fetcher registered for ats_type %r (source %r)", source.ats_type, source.name)
+            log.error(
+                "no fetcher registered for ats_type %r (source %r)", source.ats_type, source.name
+            )
             continue
         try:
             scraped = fetcher(source)

@@ -1,6 +1,7 @@
 """Alert channel interface."""
 
-from typing import Protocol, Sequence, runtime_checkable
+from collections.abc import Sequence
+from typing import Protocol, runtime_checkable
 
 from jobwatch.db.models import Posting
 

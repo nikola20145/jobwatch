@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9"]
+dev = ["pytest>=8,<9", "ruff>=0.4,<1", "mypy>=1.10,<2"]
 
 [project.scripts]
 jobwatch = "jobwatch.cli:main"
@@ -32,3 +32,25 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+# Depends() in argument defaults is FastAPI's own dependency-injection idiom.
+"src/jobwatch/web.py" = ["B008"]
+# Test data and assertion lines read better unwrapped.
+"tests/*" = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true

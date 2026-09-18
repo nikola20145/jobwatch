@@ -45,7 +45,9 @@ def fetch_board(
     for job in data.get("jobs", []):
         posting = _normalize(job)
         if posting is None:
-            log.warning("skipping malformed greenhouse job on board %r: %r", board_token, job.get("id"))
+            log.warning(
+                "skipping malformed greenhouse job on board %r: %r", board_token, job.get("id")
+            )
             continue
         postings.append(posting)
     return postings

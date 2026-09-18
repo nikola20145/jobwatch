@@ -6,7 +6,7 @@ bare JSON array and timestamps as epoch milliseconds
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -75,6 +75,6 @@ def _from_epoch_ms(value: Any) -> datetime | None:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return None
     try:
-        return datetime.fromtimestamp(value / 1000, tz=timezone.utc)
+        return datetime.fromtimestamp(value / 1000, tz=UTC)
     except (OverflowError, OSError, ValueError):
         return None

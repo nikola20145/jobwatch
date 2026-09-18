@@ -1,7 +1,7 @@
 """Telegram alert channel via the Bot API."""
 
 import html
-from typing import Sequence
+from collections.abc import Sequence
 
 import httpx
 

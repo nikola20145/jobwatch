@@ -1,6 +1,6 @@
 """Database schema: sources, postings, keywords, alerts_sent."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     JSON,
@@ -22,7 +22,7 @@ KEYWORD_FIELDS = ("title", "location")
 
 
 def utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):
@@ -120,7 +120,9 @@ class AlertSent(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    posting_id: Mapped[int] = mapped_column(ForeignKey("postings.id", ondelete="CASCADE"), index=True)
+    posting_id: Mapped[int] = mapped_column(
+        ForeignKey("postings.id", ondelete="CASCADE"), index=True
+    )
     channel: Mapped[str] = mapped_column(String(50))
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     suppressed: Mapped[bool] = mapped_column(Boolean(), default=False)

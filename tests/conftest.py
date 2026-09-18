@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import create_engine
@@ -43,7 +43,7 @@ def make_scraped(
     title: str = "Software Engineer Intern",
     url: str = "https://example.com/jobs/100",
     location: str | None = "Amsterdam",
-    posted_at: datetime | None = datetime(2026, 9, 1, tzinfo=timezone.utc),
+    posted_at: datetime | None = datetime(2026, 9, 1, tzinfo=UTC),
 ) -> ScrapedPosting:
     return ScrapedPosting(
         external_id=external_id,

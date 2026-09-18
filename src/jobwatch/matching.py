@@ -1,7 +1,8 @@
 """Keyword matching: does a posting fit the saved criteria?"""
 
 import re
-from typing import Protocol, Sequence
+from collections.abc import Sequence
+from typing import Protocol
 
 from jobwatch.db.models import Keyword
 
