@@ -11,7 +11,7 @@ from jobwatch.alerts.base import Alerter
 from jobwatch.db.models import AlertSent, Keyword, Posting, Source
 from jobwatch.ingest import IngestStats, ingest_postings
 from jobwatch.matching import posting_matches
-from jobwatch.scrapers import greenhouse, lever
+from jobwatch.scrapers import greenhouse, lever, recruitee
 from jobwatch.scrapers.base import ScrapedPosting
 
 log = logging.getLogger(__name__)
@@ -21,6 +21,7 @@ Fetcher = Callable[[Source], list[ScrapedPosting]]
 FETCHERS: dict[str, Fetcher] = {
     "greenhouse": lambda source: greenhouse.fetch_board(source.board_token),
     "lever": lambda source: lever.fetch_board(source.board_token),
+    "recruitee": lambda source: recruitee.fetch_board(source.board_token),
 }
 
 
